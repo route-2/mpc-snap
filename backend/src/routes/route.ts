@@ -1,5 +1,5 @@
 import express, { Request, Response, Application } from "express";
-import {ShareModel} from "../models/Share";
+import {ShareModel} from "../Model/Share";
 import Cryptr from "cryptr";
 
 const router = express.Router();

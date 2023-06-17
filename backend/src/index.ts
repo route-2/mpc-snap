@@ -1,30 +1,28 @@
 import express, { Request, Response, Application } from "express";
-import {ShareModel} from "./models/Share";
+import { ShareModel } from "./Model/Share";
 import mongoose from "mongoose";
 import * as dotenv from "dotenv";
-import cors from 'cors';
+import cors from "cors";
 // import routes
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT
+const PORT = process.env.PORT;
 
 app.post(
   "/",
+
   async (req: Request, res: Response) => {
-   
     const newShare = new ShareModel({
-      address : "0x00ad",
-      share:"bb83765e"
+      address: "0x0fesnsuy",
+      share: "bvuwy879",
     });
-   
-      await newShare.save();
-      res.status(201).json(newShare);
-  
+
+    await newShare.save();
+    res.status(201).json(newShare);
   }
 );
-
 mongoose.set("strictQuery", false);
 mongoose
   .connect(process.env.MONGO_URL!)
@@ -35,5 +33,3 @@ mongoose
   .catch((error) => {
     console.error("MongoDB connection error:", error);
   });
-
-
