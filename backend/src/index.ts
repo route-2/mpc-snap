@@ -9,13 +9,15 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT;
+app.use(express.json());
 
 app.post(
   "/",
 
   async (req: Request, res: Response) => {
+    const { address } = req.body;
     const newShare = new ShareModel({
-      address: "0x0fesnsuy",
+      address: address,
       share: "bvuwy879",
     });
 
