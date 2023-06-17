@@ -1,7 +1,7 @@
 import mongoose from "mongoose"
 const {Schema} = mongoose
 
-const ShareSchema = new Schema({
+const Share = new Schema({
     address: {
         type: String,
     },
@@ -12,7 +12,8 @@ const ShareSchema = new Schema({
 });
 
 
-const Share = mongoose.model('share',ShareSchema);
+export const ShareModel = mongoose.model('Share',Share);
 
-module.exports = Share;
+
+module.exports = ShareModel;
 
