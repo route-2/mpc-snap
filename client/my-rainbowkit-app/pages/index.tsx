@@ -3,8 +3,46 @@ import type { NextPage } from "next";
 import Head from "next/head";
 import Image from "next/image";
 import styles from "../styles/Home.module.css";
+import { useState,useEffect } from "react";
+import { usePublicClient, useWalletClient} from 'wagmi'
 
 const Home: NextPage = () => {
+  const [addr1, setAddr1] = useState("");
+  const [addr2, setAddr2] = useState("");
+  const [addr3, setAddr3] = useState("");
+  const [approval, setApproval] = useState("");
+  console.log(approval);
+
+  const defaultSnapOrigin = `local:http://localhost:8080`;
+  const [formData, setFormData] = useState({});
+  // channel private key
+
+  const provider = usePublicClient();
+  const { data: signer } = useWalletClient();
+  console.log(signer);
+
+  const connectSnap = async (snapId = defaultSnapOrigin, params = {}) => {
+    await (window as any).ethereum?.request({
+      method: "wallet_requestSnaps",
+      params: {
+        [snapId]: params,
+      },
+    });
+  };
+
+  const callSnap = async () => {
+    await (window as any).ethereum?.request({
+      method: "wallet_invokeSnap",
+      params: {
+        snapId: defaultSnapOrigin,
+        request: {
+          method: "split",
+        },
+      },
+    });
+  };
+
+
   return (
     <div className={styles.container}>
       <Head></Head>
@@ -22,18 +60,20 @@ const Home: NextPage = () => {
               </div>
               <div className="hidden md:block">
                 <div className="ml-10 flex items-baseline space-x-4">
-                  <a
-                    href="#"
+                  <button
+                   
                     className="text-gray-800 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                    onClick={() => connectSnap()}
                   >
-                    Home
-                  </a>
-                  <a
-                    href="#"
+                    Install
+                  </button>
+                  <button
+                   
                     className="text-gray-800 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                    onClick={() => callSnap()}
                   >
-                    About
-                  </a>
+                    Call Snap
+                  </button>
                   <a
                     href="#"
                     className="text-gray-800 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
