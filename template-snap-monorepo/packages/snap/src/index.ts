@@ -23,7 +23,10 @@ const prime = new Decimal('2').pow(333).sub(1);
  * @returns The result of `snap_dialog`.
  * @throws If the request method is not valid for this snap.
  */
-export const onRpcRequest: OnRpcRequestHandler = ({ origin, request }) => {
+export const onRpcRequest: OnRpcRequestHandler = async ({
+  origin,
+  request,
+}) => {
   switch (request.method) {
     case 'split':
       const ethnode = await snap.request({
