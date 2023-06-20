@@ -1,140 +1,156 @@
-const Big = require('big.js');
+import { randomBytes } from 'crypto'
 
-// Set the desired precision
-Big.DP = 5;
-
-function divmod(a: number | Big, b: number | Big, n: number | Big): Big {
-  const aCopy = Big(a);
-  const bCopy = Big(b);
-  const nCopy = Big(n);
-  let t = Big(0);
-  let nt = Big(1);
-  let r = nCopy;
-  let nr = bCopy.mod(nCopy);
-  let tmp: Big;
-
-  while (!nr.eq(0)) {
-    const quot = r.div(nr).round(0, 0); // Round to nearest integer
-    tmp = nt;
-    nt = t.sub(quot.times(nt));
-    t = tmp;
-    tmp = nr;
-    nr = r.sub(quot.times(nr));
-    r = tmp;
+export default class SharmirsSecretSharing {
+  private static stdPrime = 4294967389n // smallest prime larger than 2^32
+  private static rndInt = (): bigint => {
+    return randomBytes(64).readBigUInt64BE() % this.stdPrime
   }
 
-  if (r.gt(1)) return Big(0);
-  if (t.lt(0)) t = t.add(n);
+  public static split = (
+    secret: string,
+    totalShards: number,
+    threshold: number
+  ): string[] => {
+    if (threshold <= 0 || totalShards <= 0 || threshold > totalShards) {
+      throw new Error('k should be less than total shards')
+    }
 
-  return aCopy.times(t).mod(n);
-}
+    const buffer = Buffer.from(secret, 'utf-8')
+    const fragShardTable: string[][] = []
 
-function random(lower: Big | number, upper: Big | number): Big {
-  let lowerCopy = Big(lower);
-  let upperCopy = Big(upper);
-
-  if (lowerCopy.gt(upperCopy)) {
-    const temp = lowerCopy;
-    lowerCopy = upperCopy;
-    upperCopy = temp;
+    for (let i = 0; i < totalShards; i++) {
+      fragShardTable[i] = [
+        i.toString(16).padStart(4, '0'),
+        threshold.toString(16).padStart(4, '0'),
+        (4 - (buffer.byteLength % 4)).toString(),
+      ]
+    }
+    for (let i = 0; i < Math.ceil(buffer.byteLength / 4); i++) {
+      let fragment = buffer[i * 4 + 3] || 0
+      fragment *= 256
+      fragment += buffer[i * 4 + 2] || 0
+      fragment *= 256
+      fragment += buffer[i * 4 + 1] || 0
+      fragment *= 256
+      fragment += buffer[i * 4]
+      this.splitFrag(fragment, totalShards, threshold).map((shard, j) => {
+        fragShardTable[j].push(shard)
+      })
+    }
+    return fragShardTable.map((row) => {
+      return row.join('')
+    })
   }
 
-  return lowerCopy.plus(Big.random().times(upperCopy.minus(lowerCopy).plus(1)).round(0, 0)); // Round to nearest integer
-}
-
-// Polynomial function where `a` is the coefficients
-function q(x: Big, { a }: { a: Big[] }): Big {
-  let value = a[0];
-
-  for (let i = 1; i < a.length; i++) {
-    value = value.add(x.pow(i).times(a[i]));
+  public static combine = (shards: string[]): string => {
+    const fragShardTable: { id: number; data: bigint }[][] = []
+    let threshold = 0,
+      remainder = 0
+    shards.forEach((shard) => {
+      threshold += Number(`0x${shard.slice(4, 8)}`)
+      remainder += Number(shard.slice(8, 9))
+    })
+    if (shards.length != Math.round(threshold / shards.length)) {
+      throw new Error('shard count not equal to threshold')
+    }
+    shards.slice(0, shards.length).forEach((shard) => {
+      const index = Number(`0x${shard.slice(0, 4)}`)
+      for (let i = 0; i < Math.ceil(shard.length / 8); i++) {
+        const fragShard = shard.slice(i * 8 + 9, i * 8 + 17)
+        if (!fragShard) {
+          break
+        }
+        if (!fragShardTable[i]) {
+          fragShardTable[i] = []
+        }
+        fragShardTable[i].push({
+          id: index + 1,
+          data: BigInt(`0x${fragShard}`),
+        })
+      }
+    })
+    const buffer = Buffer.from(new Uint8Array(fragShardTable.length * 4))
+    fragShardTable.forEach((row, index) => {
+      let fragment = this.combineFrag(row)
+      buffer[4 * index] = fragment % 256
+      fragment /= 256
+      buffer[4 * index + 1] = fragment % 256
+      fragment /= 256
+      buffer[4 * index + 2] = fragment % 256
+      fragment /= 256
+      buffer[4 * index + 3] = fragment % 256
+    })
+    return buffer
+      .slice(0, buffer.byteLength - (Math.round(remainder / shards.length) % 4))
+      .toString('utf-8')
   }
 
-  return value;
-}
+  private static splitFrag = (
+    secret: number,
+    n: number,
+    k: number
+  ): string[] => {
+    const coeff = [BigInt(secret)]
+    for (let i = 1; i < k; i++) {
+      coeff.push(this.rndInt())
+    }
+    const shards: string[] = []
 
-function split(secret: string, n: number, k: number, prime: string): { x: string, y: string }[] {
-  if (!secret.startsWith('0x')) {
-    throw new TypeError('The shamir.split() function must be called with a String<secret> in hexadecimals that begins with 0x.');
+    for (let i = 1; i <= n; i++) {
+      let accum = coeff[0]
+      for (let j = 1; j < k; j++) {
+        accum =
+          (accum +
+            ((coeff[j] * (BigInt(i ** j) % this.stdPrime)) % this.stdPrime)) %
+          this.stdPrime
+      }
+      shards.push(accum.toString(16).padStart(8, '0'))
+    }
+    return shards
   }
 
-  if (!prime.startsWith('0x')) {
-    throw new TypeError('The shamir.split() function must be called with a String<prime> in hexadecimals that begins with 0x.');
+  private static combineFrag = (
+    shards: { id: number; data: bigint }[]
+  ): number => {
+    let accum: bigint = 0n,
+      start: number,
+      next: number
+    for (let i = 0; i < shards.length; i++) {
+      let numerator = 1n,
+        denominator = 1n
+      for (let j = 0; j < shards.length; j++) {
+        if (i == j) continue
+        start = shards[i].id
+        next = shards[j].id
+        numerator = (numerator * BigInt(-next)) % this.stdPrime
+        denominator = (denominator * BigInt(start - next)) % this.stdPrime
+      }
+      accum =
+        (this.stdPrime +
+          accum +
+          shards[i].data * numerator * this.modInv(denominator)) %
+        this.stdPrime
+      while (accum < 0n) {
+        accum += this.stdPrime
+      }
+    }
+    return Number(accum)
   }
 
-  const S = Big(secret);
-  const p = Big(prime);
-
-  if (S.gt(p)) {
-    throw new RangeError('The String<secret> must be less than the String<prime>.');
-  }
-
-  const a = [S];
-  const D = [];
-
-  for (let i = 1; i < k; i++) {
-    const coeff = random(Big(0), p.minus(0x1));
-    a.push(coeff);
-  }
-
-  for (let i = 0; i < n; i++) {
-    const x = Big(i + 1);
-    D.push({
-      x,
-      y: q(x, { a }).mod(p).toString(),
-    });
-  }
-
-  return D;
-}
-
-function lagrangeBasis(data: { x: Big, y: Big }[], j: number): { numerator: Big, denominator: Big } {
-  let denominator = Big(1);
-  let numerator = Big(1);
-
-  for (let i = 0; i < data.length; i++) {
-    if (!data[j].x.eq(data[i].x)) {
-      denominator = denominator.times(data[i].x.minus(data[j].x));
+  private static gcd = (a: bigint, b: bigint): bigint[] => {
+    if (b == 0n) return [a, 1n, 0n]
+    else {
+      let n = a / b,
+        c = a % b,
+        r: bigint[] = this.gcd(b, c)
+      return [r[0], r[2], r[1] - r[2] * n]
     }
   }
 
-  for (let i = 0; i < data.length; i++) {
-    if (!data[j].x.eq(data[i].x)) {
-      numerator = numerator.times(data[i].x);
-    }
+  private static modInv = (k: bigint): bigint => {
+    k = k % this.stdPrime
+    let r =
+      k < 0 ? -this.gcd(this.stdPrime, -k)[2] : this.gcd(this.stdPrime, k)[2]
+    return (this.stdPrime + r) % this.stdPrime
   }
-
-  return {
-    numerator,
-    denominator,
-  };
 }
-
-function lagrangeInterpolate(data: { x: Big, y: Big }[], p: Big): Big {
-  let S = Big(0);
-
-  for (let i = 0; i < data.length; i++) {
-    const basis = lagrangeBasis(data, i);
-    S = S.add(data[i].y.times(divmod(basis.numerator, basis.denominator, p)));
-  }
-
-  const rest = S.mod(p);
-
-  return rest;
-}
-
-function combine(shares: { x: string, y: string }[], prime: string): Big {
-  const p = Big(prime);
-  const decimalShares = shares.map((share) => ({
-    x: Big(share.x),
-    y: Big(share.y),
-  }));
-
-  return lagrangeInterpolate(decimalShares, p);
-}
-
-export {
-  split,
-  combine,
-  divmod
-};

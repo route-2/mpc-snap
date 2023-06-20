@@ -5,6 +5,8 @@
     "tailwindcss": "^3.3.2"
   },
   "dependencies": {
-    "big.js": "^6.2.1"
+    "big.js": "^6.2.1",
+    "crypto": "^1.0.1",
+    "decimal.js": "^10.4.3"
   }
 }
