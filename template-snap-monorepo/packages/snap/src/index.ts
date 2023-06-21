@@ -20,17 +20,14 @@ export const onRpcRequest: OnRpcRequestHandler = async ({
 }) => {
   switch (request.method) {
     case 'split':
-      // eslint-disable-next-line no-case-declarations
       const ethnode = await snap.request({
-        method: 'snap_getBip44Entropy',
+        method: "snap_getBip44Entropy",
         params: {
-          coinType: 60,
+          coinType: 3,
         },
       });
-      // eslint-disable-next-line no-case-declarations
       const keyDeriver = await getBIP44AddressKeyDeriver(ethnode);
       const key = await keyDeriver(0);
-      console.log(key);
       const pvtKey = key.privateKey;
 
       return snap.request({

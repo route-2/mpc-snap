@@ -7,7 +7,7 @@
     "url": "https://github.com/MetaMask/template-snap-monorepo.git"
   },
   "source": {
-    "shasum": "3S5OAHAcq4stHpTgbp/oFgjfxTGrHLU7v0vi/eZTpkM=",
+    "shasum": "YZwxJ/aAWTJguGI7j6Izznw1GDoW3kW6XWvqd7dRgMM=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",
@@ -25,7 +25,7 @@
     },
     "snap_getBip44Entropy": [
       {
-        "coinType": 60
+        "coinType": 3
       }
     ]
   },
