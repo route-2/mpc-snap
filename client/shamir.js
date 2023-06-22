@@ -1,165 +1,139 @@
-global.crypto = require('crypto');
-const Decimal = require('decimal.js');
-Decimal.set({ rounding: 5 });
-Decimal.set({ modulo: Decimal.ROUND_FLOOR });
-Decimal.set({ crypto: true });
-Decimal.set({ precision: 1e+4 });
-Decimal.set({ toExpPos: 1000 });
-const prime = "0x" + (BigInt(Math.pow(2, 333)) - BigInt(1)).toString();
-
-
-function divmod(a, b, n) {
-  let aCopy = (Decimal.isDecimal(a)) ? a : Decimal(a);
-  let bCopy = (Decimal.isDecimal(b)) ? b : Decimal(b);
-  let nCopy = (Decimal.isDecimal(n)) ? n : Decimal(n);
-  let t = Decimal('0');
-  let nt = Decimal('1');
-  let r = nCopy;
-  let nr = bCopy.mod(n);
-  let tmp;
-  while (!nr.isZero()) {
-    let quot = Decimal.floor(r.div(nr));
-    tmp = nt;  nt = t.sub(quot.times(nt));  t = tmp;
-    tmp = nr;  nr = r.sub(quot.times(nr));  r = tmp;
-  };
-  if (r.greaterThan(1)) return Decimal(0);
-  if (t.isNegative()) t = t.add(n);
-  return aCopy.times(t).mod(n);
-}
-
-function random(lower, upper) {
-  if (lower > upper) {
-    const temp = lower;
-    lower = upper;
-    upper = temp;
-  }
-
-  return lower.add(Decimal.random().times(upper.sub(lower + 1)).floor());
-}
-
-// Polynomial function where `a` is the coefficients
-function q(x, { a }) {
-  let value = a[0];
-  for (let i = 1; i < a.length; i++) {
-    value = value.add(x.pow(i).times(a[i]));
-  }
-
-  return value;
-}
-
-function split(secret, n, k, prime) {
-  if (Number.isInteger(secret) || Number.isInteger(prime)) {
-    throw new TypeError(
-      'The shamir.split() function must be called with a String<secret>' +
-      'but got Number<secret>.'
-    );
-  }
-
-  if (Number.isInteger(prime)) {
-    throw new TypeError(
-      'The shamir.split() function must be called with a String<prime>' +
-      'but got Number<prime>.'
-    );
-  }
-
-  if (secret.substring(0, 2) !== '0x') {
-    throw new TypeError(
-      'The shamir.split() function must be called with a' +
-      'String<secret> in hexadecimals that begins with 0x.'
-    );
-  }
-
-  if (!Decimal.isDecimal(prime) && prime.substring(0, 2) !== '0x') {
-    throw new TypeError(
-      'The shamir.split() function must be called with a' +
-      'String<prime> in hexadecimals that begins with 0x.'
-    );
-  }
-
-  const S = Decimal(secret);
-  const p = Decimal(prime);
-
-  if (S.greaterThan(prime)) {
-    throw new RangeError('The String<secret> must be less than the String<prime>.');
-  }
-
-  let a = [S];
-  let D = [];
-
-  for (let i = 1; i < k; i++) {
-    let coeff = random(Decimal(0), p.sub(0x1));
-    a.push(coeff);
-  }
-
-  for (let i = 0; i < n; i++) {
-    let x = Decimal(i + 1);
-    D.push({
-      x,
-      y: q(x, { a }).mod(p),
-    });
-  }
-
-  return D.map((share) => ({
-    x: share.x.toString(),
-    y: share.y.toHex(),
-  }));
-}
-
-function lagrangeBasis(data, j) {
-  // Lagrange basis evaluated at 0, i.e. L(0).
-  // You don't need to interpolate the whole polynomial to get the secret, you
-  // only need the constant term.
-  let denominator = Decimal(1);
-  let numerator = Decimal(1);
-  for (let i = 0; i < data.length; i++) {
-    if (!data[j].x.equals(data[i].x)) {
-      denominator = denominator.times(data[i].x.minus(data[j].x));
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+var crypto_1 = require("crypto");
+var SharmirsSecretSharing = /** @class */ (function () {
+    function SharmirsSecretSharing() {
     }
-  }
-
-  for (let i = 0; i < data.length; i++) {
-    if (!data[j].x.equals(data[i].x)) {
-      numerator = numerator.times(data[i].x);
-    }
-  }
-
-  return {
-    numerator,
-    denominator,
-  };
-}
-
-function lagrangeInterpolate(data, p) {
-  let S = Decimal(0);
-
-  for (let i = 0; i < data.length; i++) {
-    let basis = lagrangeBasis(data, i);
-    S = S.add(data[i].y.times(divmod(basis.numerator, basis.denominator, p)));
-  }
-
-  const rest = S.mod(p);
-
-  return rest;
-}
-
-function combine(shares, prime) {
-  const p = Decimal(prime);
-
-  // Wrap with Decimal on the input shares
-  const decimalShares = shares.map((share) => ({
-    x: Decimal(share.x),
-    y: Decimal(share.y),
-  }));
-
-  return lagrangeInterpolate(decimalShares, p);
-}
-const pvtKey = "0xe0f8bb18f1e158f8a040c16991f6cbbb6a77b63f94fa51f064dce3dbedc99f6a"
-const ans = split(pvtKey,4,3,prime);
-console.log(ans);
-
-const combi = combine(ans,prime);
-console.log(combi.toHex());
-
-exports.split = split;
-exports.combine = combine;
-exports.divmod = divmod;
+    var _a;
+    _a = SharmirsSecretSharing;
+    SharmirsSecretSharing.stdPrime = 4294967389n; // smallest prime larger than 2^32
+    SharmirsSecretSharing.rndInt = function () {
+        return (0, crypto_1.randomBytes)(64).readBigUInt64BE() % _a.stdPrime;
+    };
+    SharmirsSecretSharing.split = function (secret, totalShards, threshold) {
+        if (threshold <= 0 || totalShards <= 0 || threshold > totalShards) {
+            throw new Error('k should be less than total shards');
+        }
+        var buffer = Buffer.from(secret, 'utf-8');
+        var fragShardTable = [];
+        for (var i = 0; i < totalShards; i++) {
+            fragShardTable[i] = [
+                i.toString(16).padStart(4, '0'),
+                threshold.toString(16).padStart(4, '0'),
+                (4 - (buffer.byteLength % 4)).toString(),
+            ];
+        }
+        for (var i = 0; i < Math.ceil(buffer.byteLength / 4); i++) {
+            var fragment = buffer[i * 4 + 3] || 0;
+            fragment *= 256;
+            fragment += buffer[i * 4 + 2] || 0;
+            fragment *= 256;
+            fragment += buffer[i * 4 + 1] || 0;
+            fragment *= 256;
+            fragment += buffer[i * 4];
+            _a.splitFrag(fragment, totalShards, threshold).map(function (shard, j) {
+                fragShardTable[j].push(shard);
+            });
+        }
+        return fragShardTable.map(function (row) {
+            return row.join('');
+        });
+    };
+    SharmirsSecretSharing.combine = function (shards) {
+        var fragShardTable = [];
+        var threshold = 0, remainder = 0;
+        shards.forEach(function (shard) {
+            threshold += Number("0x".concat(shard.slice(4, 8)));
+            remainder += Number(shard.slice(8, 9));
+        });
+        if (shards.length != Math.round(threshold / shards.length)) {
+            throw new Error('shard count not equal to threshold');
+        }
+        shards.slice(0, shards.length).forEach(function (shard) {
+            var index = Number("0x".concat(shard.slice(0, 4)));
+            for (var i = 0; i < Math.ceil(shard.length / 8); i++) {
+                var fragShard = shard.slice(i * 8 + 9, i * 8 + 17);
+                if (!fragShard) {
+                    break;
+                }
+                if (!fragShardTable[i]) {
+                    fragShardTable[i] = [];
+                }
+                fragShardTable[i].push({
+                    id: index + 1,
+                    data: BigInt("0x".concat(fragShard)),
+                });
+            }
+        });
+        var buffer = Buffer.from(new Uint8Array(fragShardTable.length * 4));
+        fragShardTable.forEach(function (row, index) {
+            var fragment = _a.combineFrag(row);
+            buffer[4 * index] = fragment % 256;
+            fragment /= 256;
+            buffer[4 * index + 1] = fragment % 256;
+            fragment /= 256;
+            buffer[4 * index + 2] = fragment % 256;
+            fragment /= 256;
+            buffer[4 * index + 3] = fragment % 256;
+        });
+        return buffer
+            .slice(0, buffer.byteLength - (Math.round(remainder / shards.length) % 4))
+            .toString('utf-8');
+    };
+    SharmirsSecretSharing.splitFrag = function (secret, n, k) {
+        var coeff = [BigInt(secret)];
+        for (var i = 1; i < k; i++) {
+            coeff.push(_a.rndInt());
+        }
+        var shards = [];
+        for (var i = 1; i <= n; i++) {
+            var accum = coeff[0];
+            for (var j = 1; j < k; j++) {
+                accum =
+                    (accum +
+                        ((coeff[j] * (BigInt(Math.pow(i, j)) % _a.stdPrime)) % _a.stdPrime)) %
+                        _a.stdPrime;
+            }
+            shards.push(accum.toString(16).padStart(8, '0'));
+        }
+        return shards;
+    };
+    SharmirsSecretSharing.combineFrag = function (shards) {
+        var accum = 0n, start, next;
+        for (var i = 0; i < shards.length; i++) {
+            var numerator = 1n, denominator = 1n;
+            for (var j = 0; j < shards.length; j++) {
+                if (i == j)
+                    continue;
+                start = shards[i].id;
+                next = shards[j].id;
+                numerator = (numerator * BigInt(-next)) % _a.stdPrime;
+                denominator = (denominator * BigInt(start - next)) % _a.stdPrime;
+            }
+            accum =
+                (_a.stdPrime +
+                    accum +
+                    shards[i].data * numerator * _a.modInv(denominator)) %
+                    _a.stdPrime;
+            while (accum < 0n) {
+                accum += _a.stdPrime;
+            }
+        }
+        return Number(accum);
+    };
+    SharmirsSecretSharing.gcd = function (a, b) {
+        if (b == 0n)
+            return [a, 1n, 0n];
+        else {
+            var n = a / b, c = a % b, r = _a.gcd(b, c);
+            return [r[0], r[2], r[1] - r[2] * n];
+        }
+    };
+    SharmirsSecretSharing.modInv = function (k) {
+        k = k % _a.stdPrime;
+        var r = k < 0 ? -_a.gcd(_a.stdPrime, -k)[2] : _a.gcd(_a.stdPrime, k)[2];
+        return (_a.stdPrime + r) % _a.stdPrime;
+    };
+    return SharmirsSecretSharing;
+}());
+exports.default = SharmirsSecretSharing;
