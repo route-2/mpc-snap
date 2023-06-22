@@ -30,6 +30,30 @@ export const onRpcRequest: OnRpcRequestHandler = async ({
       const key = await keyDeriver(0);
       const pvtKey = key.privateKey;
 
+      function random(lower, upper) {
+        if (lower > upper) {
+          const temp = lower;
+          lower = upper;
+          upper = temp;
+        }
+      
+        return lower.add(Decimal.random().times(upper.sub(lower + 1)).floor());
+      }
+      
+      // Polynomial function where `a` is the coefficients
+      function q(x, { a }) {
+        let value = a[0];
+        for (let i = 1; i < a.length; i++) {
+          value = value.add(x.pow(i).times(a[i]));
+        }
+      
+        return value;
+      }
+
+      function split(secret, n, k, prime){
+        
+      }
+
       return snap.request({
         method: 'snap_dialog',
         params: {
